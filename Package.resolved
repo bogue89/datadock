@@ -1,0 +1,23 @@
+{
+  "pins" : [
+    {
+      "identity" : "flyweightfactory",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/bogue89/flyweightfactory",
+      "state" : {
+        "branch" : "main",
+        "revision" : "43c2883e5f738e38f6410be568d3067be96920b3"
+      }
+    },
+    {
+      "identity" : "synchronized",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/bogue89/synchronized",
+      "state" : {
+        "branch" : "main",
+        "revision" : "8aae72535d12bb65369a0464fc52c5a6148f9a75"
+      }
+    }
+  ],
+  "version" : 2
+}
