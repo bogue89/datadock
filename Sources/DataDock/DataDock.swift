@@ -3,55 +3,68 @@ import FlyweightFactory
 
 public struct DataDock {
 
-    public static let shared = DataDock()
+    static let domain = "mx.pewpew.DataDock."
+
+    private let configuration: DataDockConfiguration
+
+    public init(configuration: DataDockConfiguration) {
+        self.configuration = configuration
+    }
+
+    public static let `default` = DataDock(configuration: .default)
+    public static let `background` = DataDock(configuration: .background)
 
     private struct Factory: FlyweightFactory {
         static var instances: [DataDockConfiguration : URLSession] = [:]
     }
 
-    public func session(for config: DataDockConfiguration) -> URLSession {
+    private static func session(for config: DataDockConfiguration) -> URLSession {
         Factory.instance(for: config, initializer: {
             let configuration: URLSessionConfiguration
             if config.isBackground {
                 configuration = URLSessionConfiguration.background(withIdentifier: config.id)
+                configuration.sessionSendsLaunchEvents = true
             } else {
                 configuration = URLSessionConfiguration.ephemeral
             }
             configuration.allowsCellularAccess = config.allowsCellularAccess
             configuration.isDiscretionary = config.isDiscretionary
+            config.delegate.addCompletion {
+                // invalidate the session, cancel pending tasks, and removing the session form memory
+                invalidateSession(for: config)
+            }
             return URLSession(configuration: configuration, delegate: config.delegate, delegateQueue: config.operationQueue)
         })
     }
 
+    private static func invalidateSession(for config: DataDockConfiguration) {
+        Factory.instance(for: config)?.invalidateAndCancel()
+        Factory.destroy(with: config)
+    }
+
     @discardableResult
-    public func launchSession(with id: String, completionHandler: (() -> Void)?) -> URLSession {
+    public static func launchSession(with id: String, completionHandler: @escaping () -> Void) -> URLSession {
         let config = DataDockConfiguration.instance(for: id)
-        if let handler = completionHandler {
-            config.delegate.addCompletion(handler: handler)
-        }
-        let session = session(for: config)
-        return session
+        config.delegate.addCompletion(handler: completionHandler)
+        return session(for: config)
     }
 
     @discardableResult
     public func dataTask(_ url: URL,
-                         with configuration: DataDockConfiguration = .default,
                          priority: Float? = nil,
-                         completion: ((Data?) -> Void)? = nil) -> URLSessionDataTask? {
+                         completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDataTask? {
         let request = URLRequest(url: url, cachePolicy: configuration.cachePolicy, timeoutInterval: configuration.timeoutInterval)
         return dataTask(request,
-                        with: configuration,
                         priority: priority ?? configuration.priority,
                         completion: completion)
     }
 
     @discardableResult
     public func dataTask(_ request: URLRequest,
-                         with configuration: DataDockConfiguration = .default,
                          priority: Float? = nil,
-                         completion: ((Data?) -> Void)? = nil) -> URLSessionDataTask? {
+                         completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDataTask? {
         return dataTask(request,
-                        session: session(for: configuration),
+                        session: Self.session(for: configuration),
                         delegate: configuration.delegate,
                         priority: priority ?? configuration.priority,
                         completion: completion)
@@ -62,7 +75,7 @@ public struct DataDock {
                          session: URLSession,
                          delegate: DataDockDelegate,
                          priority: Float = URLSessionDataTask.defaultPriority,
-                         completion: ((Data?) -> Void)? = nil) -> URLSessionDataTask? {
+                         completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDataTask? {
         guard let url = request.url else { return nil }
         let hasTask = delegate.hasCallbacks(for: url)
         if let completion = completion {
@@ -76,23 +89,20 @@ public struct DataDock {
 
     @discardableResult
     public func downloadTask(_ url: URL,
-                             with configuration: DataDockConfiguration = .default,
                              priority: Float? = nil,
-                             completion: ((Data?) -> Void)? = nil) -> URLSessionDownloadTask? {
+                             completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDownloadTask? {
         let request = URLRequest(url: url, cachePolicy: configuration.cachePolicy, timeoutInterval: configuration.timeoutInterval)
         return downloadTask(request,
-                            with: configuration,
                             priority: priority ?? configuration.priority,
                             completion: completion)
     }
 
     @discardableResult
     public func downloadTask(_ request: URLRequest,
-                             with configuration: DataDockConfiguration = .default,
                              priority: Float? = nil,
-                             completion: ((Data?) -> Void)? = nil) -> URLSessionDownloadTask? {
+                             completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDownloadTask? {
         return downloadTask(request,
-                            session: session(for: configuration),
+                            session: Self.session(for: configuration),
                             delegate: configuration.delegate,
                             priority: priority ?? configuration.priority,
                             completion: completion)
@@ -103,7 +113,7 @@ public struct DataDock {
                              session: URLSession,
                              delegate: DataDockDelegate,
                              priority: Float = URLSessionDataTask.defaultPriority,
-                             completion: ((Data?) -> Void)? = nil) -> URLSessionDownloadTask? {
+                             completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDownloadTask? {
         guard let url = request.url else { return nil }
         let hasTask = delegate.hasCallbacks(for: url)
         if let completion = completion {
@@ -117,23 +127,20 @@ public struct DataDock {
 
     @discardableResult
     public func uploadTask(_ url: URL,
-                           with configuration: DataDockConfiguration = .default,
                            priority: Float? = nil,
-                           completion: ((Data?) -> Void)? = nil) -> URLSessionUploadTask? {
+                           completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionUploadTask? {
         let request = URLRequest(url: url, cachePolicy: configuration.cachePolicy, timeoutInterval: configuration.timeoutInterval)
         return uploadTask(request,
-                          with: configuration,
                           priority: priority ?? configuration.priority,
                           completion: completion)
     }
 
     @discardableResult
     public func uploadTask(_ request: URLRequest,
-                           with configuration: DataDockConfiguration = .default,
                            priority: Float? = nil,
-                           completion: ((Data?) -> Void)? = nil) -> URLSessionUploadTask? {
+                           completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionUploadTask? {
         return uploadTask(request,
-                          session: session(for: configuration),
+                          session: Self.session(for: configuration),
                           delegate: configuration.delegate,
                           priority: priority ?? configuration.priority,
                           completion: completion)
@@ -144,7 +151,7 @@ public struct DataDock {
                            session: URLSession,
                            delegate: DataDockDelegate,
                            priority: Float = URLSessionDataTask.defaultPriority,
-                           completion: ((Data?) -> Void)? = nil) -> URLSessionUploadTask? {
+                           completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionUploadTask? {
         guard let url = request.url else { return nil }
         let hasTask = delegate.hasCallbacks(for: url)
         if let completion = completion {

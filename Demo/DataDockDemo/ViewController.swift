@@ -15,11 +15,12 @@ class ViewController: UITableViewController {
         // Do any additional setup after loading the view.
         tableView.backgroundColor = .clear
         let imageView = UIImageView(frame: CGRect(origin: .zero, size: CGSize(width: 200, height: 200)))
+        imageView.contentMode = .scaleAspectFill
         tableView.backgroundView = imageView
 
-        let imageURL = URL(string: "https://picsum.photos/id/666/200")!
-        DataDock.shared.dataTask(imageURL) { data in
-            guard let data = data else { return }
+        let imageURL = URL(string: "https://upload.wikimedia.org/wikipedia/commons/9/9a/Gull_portrait_ca_usa.jpg")!
+        DataDock.background.downloadTask(imageURL) { result in
+            guard case let .success(data) = result else { return }
             DispatchQueue.main.async {
                 imageView.image = UIImage(data: data)
             }
@@ -32,7 +33,7 @@ class ViewController: UITableViewController {
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        1000
+        3
     }
 
     override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
@@ -41,18 +42,24 @@ class ViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let id = "generic"
-        let cell = tableView.dequeueReusableCell(withIdentifier: id) ?? UITableViewCell(style: .default, reuseIdentifier: id)
-        cell.backgroundColor = .clear
-        return cell
+        return tableView.dequeueReusableCell(withIdentifier: id) ?? {
+            let cell = UITableViewCell(style: .default, reuseIdentifier: id)
+            cell.backgroundColor = .clear
+            cell.imageView?.backgroundColor = .red
+            cell.imageView?.frame.size = CGSize(width: 200, height: 200)
+
+            return cell
+        }()
     }
-
     override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
-        let imageURL = URL(string: "https://picsum.photos/id/\(indexPath.item)/200")!
-
-        DataDock.shared.downloadTask(imageURL, completion: { data in
-            guard let data = data else { return }
+        let imageURL = URL(string: "https://picsum.photos/id/1\(indexPath.item)/200")!
+        // only backgroudn configuration can continue after termination
+        // but isDiscretionary setting will fail on auto-redirect
+        DataDock.background.downloadTask(imageURL, completion: { result in
+            guard case let .success(data) = result else { return }
             DispatchQueue.main.async {
                 cell.imageView?.image = UIImage(data: data)
+                cell.setNeedsLayout()
             }
         })
     }

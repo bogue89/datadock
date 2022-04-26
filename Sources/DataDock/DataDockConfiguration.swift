@@ -5,7 +5,25 @@ public extension DataDock {
 
     struct DataDockConfiguration: Hashable {
 
-        public static let `default`: DataDockConfiguration = .init()
+        public static let `default`: DataDockConfiguration = .init(id: "default",
+                                                                  priority: URLSessionTask.defaultPriority,
+                                                                  isBackground: false,
+                                                                  isDiscretionary: false,
+                                                                  allowsCellularAccess: true,
+                                                                  cachePolicy: URLSessionConfiguration.ephemeral.requestCachePolicy,
+                                                                  timeoutInterval: URLSessionConfiguration.ephemeral.timeoutIntervalForRequest,
+                                                                  delegate: .init(),
+                                                                  operationQueue: Self.utilityOperationQueue)
+
+        public static let background: DataDockConfiguration = .init(id: "background",
+                                                                    priority: URLSessionTask.defaultPriority,
+                                                                    isBackground: true,
+                                                                    isDiscretionary: false,
+                                                                    allowsCellularAccess: true,
+                                                                    cachePolicy: URLSessionConfiguration.default.requestCachePolicy,
+                                                                    timeoutInterval: URLSessionConfiguration.default.timeoutIntervalForRequest,
+                                                                    delegate: .init(),
+                                                                    operationQueue: Self.utilityOperationQueue)
 
         let id: String
         let priority: Float
@@ -17,16 +35,17 @@ public extension DataDock {
         let delegate: DataDockDelegate
         let operationQueue: OperationQueue
 
-        init(id: String = "",
-             priority: Float = 0.5,
-             isBackground: Bool = true,
-             isDiscretionary: Bool = false,
-             allowsCellularAccess: Bool = true,
-             cachePolicy: URLRequest.CachePolicy = URLSessionConfiguration.default.requestCachePolicy,
-             timeoutInterval: TimeInterval = URLSessionConfiguration.default.timeoutIntervalForRequest,
-             delegate: DataDockDelegate = .init(),
-             operationQueue: OperationQueue = DataDockConfiguration.utilityOperationQueue) {
-            self.id = id
+        init(id: String,
+             priority: Float,
+             isBackground: Bool,
+             isDiscretionary: Bool,
+             allowsCellularAccess: Bool,
+             cachePolicy: URLRequest.CachePolicy,
+             timeoutInterval: TimeInterval,
+             delegate: DataDockDelegate,
+             operationQueue: OperationQueue) {
+            // ensures id is not empty
+            self.id = DataDock.domain + id
             self.priority = priority
             self.isBackground = isBackground
             self.isDiscretionary = isDiscretionary
@@ -35,6 +54,8 @@ public extension DataDock {
             self.timeoutInterval = timeoutInterval
             self.delegate = delegate
             self.operationQueue = operationQueue
+            // ensures a serial operation queue
+            self.operationQueue.maxConcurrentOperationCount = 1
         }
 
         static var utilityOperationQueue: OperationQueue {
