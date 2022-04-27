@@ -14,41 +14,6 @@ public struct DataDock {
     public static let `default` = DataDock(configuration: .default)
     public static let `background` = DataDock(configuration: .background)
 
-    private struct Factory: FlyweightFactory {
-        static var instances: [DataDockConfiguration : URLSession] = [:]
-    }
-
-    private static func session(for config: DataDockConfiguration) -> URLSession {
-        Factory.instance(for: config, initializer: {
-            let configuration: URLSessionConfiguration
-            if config.isBackground {
-                configuration = URLSessionConfiguration.background(withIdentifier: config.id)
-                configuration.sessionSendsLaunchEvents = true
-            } else {
-                configuration = URLSessionConfiguration.ephemeral
-            }
-            configuration.allowsCellularAccess = config.allowsCellularAccess
-            configuration.isDiscretionary = config.isDiscretionary
-            config.delegate.addCompletion {
-                // invalidate the session, cancel pending tasks, and removing the session form memory
-                invalidateSession(for: config)
-            }
-            return URLSession(configuration: configuration, delegate: config.delegate, delegateQueue: config.operationQueue)
-        })
-    }
-
-    private static func invalidateSession(for config: DataDockConfiguration) {
-        Factory.instance(for: config)?.invalidateAndCancel()
-        Factory.destroy(with: config)
-    }
-
-    @discardableResult
-    public static func launchSession(with id: String, completionHandler: @escaping () -> Void) -> URLSession {
-        let config = DataDockConfiguration.instance(for: id)
-        config.delegate.addCompletion(handler: completionHandler)
-        return session(for: config)
-    }
-
     @discardableResult
     public func dataTask(_ url: URL,
                          priority: Float? = nil,
@@ -77,14 +42,18 @@ public struct DataDock {
                          priority: Float = URLSessionDataTask.defaultPriority,
                          completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDataTask? {
         guard let url = request.url else { return nil }
-        let hasTask = delegate.hasCallbacks(for: url)
+
+        var task: URLSessionDataTask?
+        if !delegate.hasTask(for: url, withEqualOrGreaterPriority: priority) {
+            task = session.dataTask(with: request)
+        }
+        if let task = task {
+            delegate.addTask(task)
+        }
         if let completion = completion {
-            delegate.addCompletion(for: url, completion: completion)
+            delegate.addTaskCompletion(url, completion: completion)
         }
-        if !hasTask {
-            return startTask(session.dataTask(with: request), with: priority)
-        }
-        return nil
+        return startTask(task, with: priority)
     }
 
     @discardableResult
@@ -115,14 +84,18 @@ public struct DataDock {
                              priority: Float = URLSessionDataTask.defaultPriority,
                              completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDownloadTask? {
         guard let url = request.url else { return nil }
-        let hasTask = delegate.hasCallbacks(for: url)
+
+        var task: URLSessionDownloadTask?
+        if !delegate.hasTask(for: url, withEqualOrGreaterPriority: priority) {
+            task = session.downloadTask(with: request)
+        }
+        if let task = task {
+            delegate.addTask(task)
+        }
         if let completion = completion {
-            delegate.addCompletion(for: url, completion: completion)
+            delegate.addTaskCompletion(url, completion: completion)
         }
-        if !hasTask {
-            return startTask(session.downloadTask(with: request), with: priority)
-        }
-        return nil
+        return startTask(task, with: priority)
     }
 
     @discardableResult
@@ -153,20 +126,65 @@ public struct DataDock {
                            priority: Float = URLSessionDataTask.defaultPriority,
                            completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionUploadTask? {
         guard let url = request.url else { return nil }
-        let hasTask = delegate.hasCallbacks(for: url)
+
+        var task: URLSessionUploadTask?
+        if !delegate.hasTask(for: url, withEqualOrGreaterPriority: priority) {
+            task = session.uploadTask(with: request, from: request.httpBody ?? Data())
+        }
+        if let task = task {
+            delegate.addTask(task)
+        }
         if let completion = completion {
-            delegate.addCompletion(for: url, completion: completion)
+            delegate.addTaskCompletion(url, completion: completion)
         }
-        if !hasTask {
-            return startTask(session.uploadTask(with: request, from: request.httpBody ?? Data()), with: priority)
-        }
-        return nil
+        return startTask(task, with: priority)
     }
 
-    public func startTask<T: URLSessionTask>(_ task: T, with priority: Float) -> T {
-        task.priority = priority
-        task.resume()
+    private func startTask<T: URLSessionTask>(_ task: T?, with priority: Float) -> T? {
+        task?.priority = priority
+        task?.resume()
         return task
     }
 
+}
+
+extension DataDock {
+    private struct Factory: FlyweightFactory {
+        static var instances: [DataDockConfiguration : URLSession] = [:]
+    }
+
+    private static func session(for config: DataDockConfiguration) -> URLSession {
+        Factory.instance(for: config, initializer: {
+            let configuration: URLSessionConfiguration
+            if config.isBackground {
+                configuration = URLSessionConfiguration.background(withIdentifier: config.id)
+                if #available(macOS 11.0, *) {
+                    configuration.sessionSendsLaunchEvents = true
+                }
+            } else {
+                configuration = URLSessionConfiguration.ephemeral
+            }
+            configuration.allowsCellularAccess = config.allowsCellularAccess
+            configuration.isDiscretionary = config.isDiscretionary
+            config.delegate.addCompletionHandler {
+                // invalidate the session, cancel pending tasks, and removing the session form memory
+                terminateSession(with: config.id)
+            }
+            return URLSession(configuration: configuration, delegate: config.delegate, delegateQueue: config.operationQueue)
+        })
+    }
+
+    @discardableResult
+    public static func launchSession(with id: String, completionHandler: @escaping () -> Void) -> URLSession {
+        let config = DataDockConfiguration.instance(for: id)
+        config.delegate.addCompletionHandler(completionHandler)
+        return session(for: config)
+    }
+
+    public static func terminateSession(with id: String) {
+        let config = DataDockConfiguration.instance(for: id)
+        Factory.instance(for: config)?.invalidateAndCancel()
+        Factory.destroy(with: config)
+        DataDockConfiguration.destroy(for: id)
+    }
 }

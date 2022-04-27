@@ -1,68 +1,78 @@
 import Foundation
 import Synchronized
 
-public extension DataDock {
-    class DataDockDelegate: NSObject {
+public class DataDockDelegate: NSObject {
+    struct Task {
+        var wrappedValue: URLSessionTask
+        var callbacks: [(Result<Data, Error>) -> Void] = []
+        var data: Data = Data()
+    }
 
-        @Synchronized
-        private var handlers: [() -> Void] = []
-        @Synchronized
-        private var callbacks: [URL: [(Result<Data, Error>) -> Void]] = [:]
-        @Synchronized
-        private var stream: [URL: Data] = [:]
+    @Synchronized
+    private var handlers: [() -> Void] = []
 
-        public func hasCallbacks(for url: URL) -> Bool {
-            guard let callbacks = self.callbacks[url] else { return false }
-            return !callbacks.isEmpty
+    public func addCompletionHandler(_ completion: @escaping () -> Void) {
+        handlers.append(completion)
+    }
+
+    @Synchronized
+    private var tasks: [URL: Task] = [:]
+
+    public func hasTask(for url: URL, withEqualOrGreaterPriority priority: Float = 0) -> Bool {
+        guard let task = tasks[url] else { return false }
+        return task.wrappedValue.priority >= priority
+    }
+
+    public func addTask(_ sessionTask: URLSessionTask) {
+        guard let url = sessionTask.originalRequest?.url else { return }
+        tasks[url]?.wrappedValue.cancel()
+        tasks[url] = Task(wrappedValue: sessionTask)
+    }
+
+    public func addTaskCompletion(_ url: URL, completion: @escaping (Result<Data, Error>) -> Void) {
+        guard var task = tasks[url] else { return }
+        task.callbacks.append(completion)
+        tasks[url] = task
+    }
+
+    private func fireCallbacks(for url: URL, with result: Result<Data, Error>) {
+        if let task = tasks[url] {
+            task.callbacks.forEach { $0(result) }
+            tasks.removeValue(forKey: url)
         }
-
-        public func addCompletion(handler: @escaping (() -> Void)) {
-            self.handlers.append(handler)
-        }
-
-        public func addCompletion(for url: URL, completion: @escaping (Result<Data, Error>) -> Void) {
-            var callbacks = self.callbacks[url] ?? []
-            callbacks.append(completion)
-            self.callbacks[url] = callbacks
-        }
-
-        private func fireCallbacks(for url: URL, with result: Result<Data, Error>) {
-            guard let callbacks = self.callbacks[url] else { return }
-            callbacks.forEach { $0(result) }
-            self.callbacks.removeValue(forKey: url)
-            if self.callbacks.isEmpty {
-                fireCompletion()
-            }
-        }
-
-        private func fireCompletion() {
-            handlers.forEach { $0() }
-            handlers = []
+        if tasks.isEmpty {
+            fireCompletion()
         }
 
     }
 
+    private func fireCompletion() {
+        handlers.forEach { $0() }
+        handlers.removeAll()
+    }
+
 }
 
-extension DataDock.DataDockDelegate: URLSessionDataDelegate {
+extension DataDockDelegate: URLSessionDataDelegate {
     public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let url = dataTask.originalRequest?.url else { return }
-        stream[url] = (self.stream[url] ?? Data()) + data
+        let stream = self.tasks[url]?.data ?? Data()
+        self.tasks[url]?.data = stream + data
     }
 }
 
-extension DataDock.DataDockDelegate: URLSessionDelegate {
+extension DataDockDelegate: URLSessionDelegate {
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let url = task.originalRequest?.url else { return }
         if let error = error {
             fireCallbacks(for: url, with: .failure(error))
-        } else if let data = stream[url] {
+        } else if let data = self.tasks[url]?.data {
             fireCallbacks(for: url, with: .success(data))
         }
     }
 }
 
-extension DataDock.DataDockDelegate: URLSessionDownloadDelegate {
+extension DataDockDelegate: URLSessionDownloadDelegate {
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let url = downloadTask.originalRequest?.url, let data = try? Data(contentsOf: location) else { return }
         fireCallbacks(for: url, with: .success(data))

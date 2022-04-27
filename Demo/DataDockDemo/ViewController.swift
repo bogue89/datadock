@@ -10,6 +10,8 @@ import DataDock
 
 class ViewController: UITableViewController {
 
+    var dataDock: DataDock? = DataDock(configuration: .background)
+
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view.
@@ -19,7 +21,7 @@ class ViewController: UITableViewController {
         tableView.backgroundView = imageView
 
         let imageURL = URL(string: "https://upload.wikimedia.org/wikipedia/commons/9/9a/Gull_portrait_ca_usa.jpg")!
-        DataDock.background.downloadTask(imageURL) { result in
+        dataDock?.downloadTask(imageURL) { result in
             guard case let .success(data) = result else { return }
             DispatchQueue.main.async {
                 imageView.image = UIImage(data: data)
@@ -33,7 +35,7 @@ class ViewController: UITableViewController {
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        3
+        100
     }
 
     override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
@@ -47,15 +49,29 @@ class ViewController: UITableViewController {
             cell.backgroundColor = .clear
             cell.imageView?.backgroundColor = .red
             cell.imageView?.frame.size = CGSize(width: 200, height: 200)
-
             return cell
         }()
     }
+
     override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
-        let imageURL = URL(string: "https://picsum.photos/id/1\(indexPath.item)/200")!
-        // only backgroudn configuration can continue after termination
-        // but isDiscretionary setting will fail on auto-redirect
-        DataDock.background.downloadTask(imageURL, completion: { result in
+        let imageURL = URL(string: "https://picsum.photos/id/\(indexPath.item + 10)/200")!
+        // only background configuration can continue after termination
+        // but with the isDiscretionary setting on true, tasks will fail on auto-redirect
+        dataDock?.downloadTask(imageURL, completion: { result in
+            guard case let .success(data) = result else { return }
+            DispatchQueue.main.async {
+                cell.imageView?.image = UIImage(data: data)
+                cell.setNeedsLayout()
+            }
+        })
+        dataDock?.downloadTask(imageURL, completion: { result in
+            guard case let .success(data) = result else { return }
+            DispatchQueue.main.async {
+                cell.imageView?.image = UIImage(data: data)
+                cell.setNeedsLayout()
+            }
+        })
+        dataDock?.downloadTask(imageURL, completion: { result in
             guard case let .success(data) = result else { return }
             DispatchQueue.main.async {
                 cell.imageView?.image = UIImage(data: data)
