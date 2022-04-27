@@ -35,7 +35,6 @@ final class DataDockTests: XCTestCase {
             let task = dataDock.dataTask(url) { result in
                 results.append(result)
                 expectation.fulfill()
-                print(expectation)
             }
             tasks.append(task)
         }

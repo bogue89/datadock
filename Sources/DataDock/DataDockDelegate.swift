@@ -10,14 +10,24 @@ public class DataDockDelegate: NSObject {
 
     @Synchronized
     private var handlers: [() -> Void] = []
+    @Synchronized
+    private var tasks: [URL: Task] = [:]
+}
 
+// MARK: DataDockDelegate handlers
+extension DataDockDelegate {
     public func addCompletionHandler(_ completion: @escaping () -> Void) {
         handlers.append(completion)
     }
 
-    @Synchronized
-    private var tasks: [URL: Task] = [:]
+    private func fireCompletion() {
+        handlers.forEach { $0() }
+        handlers.removeAll()
+    }
+}
 
+// MARK: DataDockDelegate.Task Handling
+extension DataDockDelegate {
     public func hasTask(for url: URL, withEqualOrGreaterPriority priority: Float = 0) -> Bool {
         guard let task = tasks[url] else { return false }
         return task.wrappedValue.priority >= priority
@@ -43,25 +53,11 @@ public class DataDockDelegate: NSObject {
         if tasks.isEmpty {
             fireCompletion()
         }
-
-    }
-
-    private func fireCompletion() {
-        handlers.forEach { $0() }
-        handlers.removeAll()
-    }
-
-}
-
-extension DataDockDelegate: URLSessionDataDelegate {
-    public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        guard let url = dataTask.originalRequest?.url else { return }
-        let stream = self.tasks[url]?.data ?? Data()
-        self.tasks[url]?.data = stream + data
     }
 }
 
-extension DataDockDelegate: URLSessionDelegate {
+extension DataDockDelegate: URLSessionDelegate, URLSessionDataDelegate, URLSessionDownloadDelegate {
+    // MARK: URLSessionDelegate
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let url = task.originalRequest?.url else { return }
         if let error = error {
@@ -70,9 +66,15 @@ extension DataDockDelegate: URLSessionDelegate {
             fireCallbacks(for: url, with: .success(data))
         }
     }
-}
 
-extension DataDockDelegate: URLSessionDownloadDelegate {
+    // MARK: URLSessionDataDelegate
+    public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard let url = dataTask.originalRequest?.url else { return }
+        let stream = self.tasks[url]?.data ?? Data()
+        self.tasks[url]?.data = stream + data
+    }
+
+    // MARK: URLSessionDownloadDelegate
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let url = downloadTask.originalRequest?.url, let data = try? Data(contentsOf: location) else { return }
         fireCallbacks(for: url, with: .success(data))
