@@ -4,14 +4,14 @@ import FlyweightFactory
 public struct DataDockConfiguration: Hashable {
 
     public static let `default`: DataDockConfiguration = .init(id: "default",
-                                                              priority: URLSessionTask.defaultPriority,
-                                                              isBackground: false,
-                                                              isDiscretionary: false,
-                                                              allowsCellularAccess: true,
-                                                              cachePolicy: URLSessionConfiguration.ephemeral.requestCachePolicy,
-                                                              timeoutInterval: URLSessionConfiguration.ephemeral.timeoutIntervalForRequest,
-                                                              delegate: .init(),
-                                                              operationQueue: Self.utilityOperationQueue)
+                                                               priority: URLSessionTask.defaultPriority,
+                                                               isBackground: false,
+                                                               isDiscretionary: false,
+                                                               allowsCellularAccess: true,
+                                                               cachePolicy: URLSessionConfiguration.ephemeral.requestCachePolicy,
+                                                               timeoutInterval: URLSessionConfiguration.ephemeral.timeoutIntervalForRequest,
+                                                               delegate: .init(),
+                                                               operationQueue: Self.utilityOperationQueue)
 
     public static let background: DataDockConfiguration = .init(id: "background",
                                                                 priority: URLSessionTask.defaultPriority,

@@ -27,6 +27,10 @@ class ViewController: UITableViewController {
                 imageView.image = UIImage(data: data)
             }
         }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: { [weak self] in
+            self?.dataDock = nil
+        })
     }
 
 
@@ -80,4 +84,3 @@ class ViewController: UITableViewController {
         })
     }
 }
-

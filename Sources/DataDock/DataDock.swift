@@ -12,7 +12,7 @@ public struct DataDock {
     }
 
     public static let `default` = DataDock(configuration: .default)
-    public static let `background` = DataDock(configuration: .background)
+    public static let background = DataDock(configuration: .background)
 
     @discardableResult
     public func dataTask(_ url: URL,
@@ -42,18 +42,9 @@ public struct DataDock {
                          priority: Float = URLSessionDataTask.defaultPriority,
                          completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDataTask? {
         guard let url = request.url else { return nil }
-
-        var task: URLSessionDataTask?
-        if !delegate.hasTask(for: url, withEqualOrGreaterPriority: priority) {
-            task = session.dataTask(with: request)
-        }
-        if let task = task {
-            delegate.addTask(task)
-        }
-        if let completion = completion {
-            delegate.addTaskCompletion(url, completion: completion)
-        }
-        return startTask(task, with: priority)
+        return startTask(url, priority: priority, delegate: delegate, completion: completion, createTask: {
+            session.dataTask(with: request)
+        })
     }
 
     @discardableResult
@@ -84,18 +75,9 @@ public struct DataDock {
                              priority: Float = URLSessionDataTask.defaultPriority,
                              completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDownloadTask? {
         guard let url = request.url else { return nil }
-
-        var task: URLSessionDownloadTask?
-        if !delegate.hasTask(for: url, withEqualOrGreaterPriority: priority) {
-            task = session.downloadTask(with: request)
-        }
-        if let task = task {
-            delegate.addTask(task)
-        }
-        if let completion = completion {
-            delegate.addTaskCompletion(url, completion: completion)
-        }
-        return startTask(task, with: priority)
+        return startTask(url, priority: priority, delegate: delegate, completion: completion, createTask: {
+            session.downloadTask(with: request)
+        })
     }
 
     @discardableResult
@@ -126,10 +108,19 @@ public struct DataDock {
                            priority: Float = URLSessionDataTask.defaultPriority,
                            completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionUploadTask? {
         guard let url = request.url else { return nil }
+        return startTask(url, priority: priority, delegate: delegate, completion: completion, createTask: {
+            session.uploadTask(with: request, from: request.httpBody ?? Data())
+        })
+    }
 
-        var task: URLSessionUploadTask?
+    private func startTask<T: URLSessionTask>(_ url: URL,
+                                              priority: Float,
+                                              delegate: DataDockDelegate,
+                                              completion: ((Result<Data, Error>) -> Void)?,
+                                              createTask: @escaping(() -> T)) -> T? {
+        var task: T?
         if !delegate.hasTask(for: url, withEqualOrGreaterPriority: priority) {
-            task = session.uploadTask(with: request, from: request.httpBody ?? Data())
+            task = createTask()
         }
         if let task = task {
             delegate.addTask(task)
@@ -137,15 +128,10 @@ public struct DataDock {
         if let completion = completion {
             delegate.addTaskCompletion(url, completion: completion)
         }
-        return startTask(task, with: priority)
-    }
-
-    private func startTask<T: URLSessionTask>(_ task: T?, with priority: Float) -> T? {
         task?.priority = priority
         task?.resume()
         return task
     }
-
 }
 
 extension DataDock {
@@ -158,9 +144,13 @@ extension DataDock {
             let configuration: URLSessionConfiguration
             if config.isBackground {
                 configuration = URLSessionConfiguration.background(withIdentifier: config.id)
+                #if os(macOS)
                 if #available(macOS 11.0, *) {
                     configuration.sessionSendsLaunchEvents = true
                 }
+                #else
+                configuration.sessionSendsLaunchEvents = true
+                #endif
             } else {
                 configuration = URLSessionConfiguration.ephemeral
             }

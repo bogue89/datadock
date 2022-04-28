@@ -5,7 +5,7 @@ public class DataDockDelegate: NSObject {
     struct Task {
         var wrappedValue: URLSessionTask
         var callbacks: [(Result<Data, Error>) -> Void] = []
-        var data: Data = Data()
+        var data: Data = .init()
     }
 
     @Synchronized
@@ -14,8 +14,8 @@ public class DataDockDelegate: NSObject {
     private var tasks: [URL: Task] = [:]
 }
 
-// MARK: DataDockDelegate handlers
 extension DataDockDelegate {
+    // MARK: DataDockDelegate handlers
     public func addCompletionHandler(_ completion: @escaping () -> Void) {
         handlers.append(completion)
     }
@@ -24,10 +24,8 @@ extension DataDockDelegate {
         handlers.forEach { $0() }
         handlers.removeAll()
     }
-}
 
-// MARK: DataDockDelegate.Task Handling
-extension DataDockDelegate {
+    // MARK: DataDockDelegate.Task Handling
     public func hasTask(for url: URL, withEqualOrGreaterPriority priority: Float = 0) -> Bool {
         guard let task = tasks[url] else { return false }
         return task.wrappedValue.priority >= priority
