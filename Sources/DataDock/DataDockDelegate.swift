@@ -1,20 +1,47 @@
 import Foundation
 import Synchronized
+import FlyweightFactory
 
 public class DataDockDelegate: NSObject {
-    struct Task {
+
+    public let operationQueue: OperationQueue
+    @Synchronized
+    private var handlers: [() -> Void] = []
+    @Synchronized
+    private var tasks: [URL: Task] = [:]
+
+    public init(qualityOfService: QualityOfService = .utility) {
+        let operationQueue = OperationQueue()
+        operationQueue.qualityOfService = qualityOfService
+        operationQueue.maxConcurrentOperationCount = 1
+        self.operationQueue = operationQueue
+    }
+    
+}
+
+extension DataDockDelegate {
+
+    private struct Task {
         var wrappedValue: URLSessionTask
         var callbacks: [(Result<Data, Error>) -> Void] = []
         var data: Data = .init()
     }
 
-    @Synchronized
-    private var handlers: [() -> Void] = []
-    @Synchronized
-    private var tasks: [URL: Task] = [:]
-}
+    // MARK: DataDockDelegate Factory
+    public static func instance(for id: String) -> DataDockDelegate {
+        Factory.instance(for: id, initializer: {
+            DataDockDelegate()
+        })
+    }
 
-extension DataDockDelegate {
+    public static func destroy(for id: String) {
+        Factory.destroy(with: id)
+    }
+
+    private struct Factory: FlyweightFactory {
+        static var instances: [String : DataDockDelegate] = [:]
+    }
+
     // MARK: DataDockDelegate handlers
     public func addCompletionHandler(_ completion: @escaping () -> Void) {
         handlers.append(completion)

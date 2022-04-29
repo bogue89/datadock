@@ -6,29 +6,17 @@ final class DataDockTests: XCTestCase {
     let url: URL = URL(string: "https://www.wikipedia.org/portal/wikipedia.org/assets/img/Wikipedia-logo-v2.png")!
     var request: URLRequest { .init(url: url) }
 
-    let dataDockDelegate = DataDockDelegate()
-
-    lazy
-    var dataDockConfiguration = DataDockConfiguration(id: "test",
-                                                      priority: URLSessionTask.defaultPriority,
-                                                      isBackground: false,
-                                                      isDiscretionary: false,
-                                                      allowsCellularAccess: false,
-                                                      cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
-                                                      timeoutInterval: .greatestFiniteMagnitude,
-                                                      delegate: dataDockDelegate,
-                                                      operationQueue: DataDockConfiguration.utilityOperationQueue)
-    lazy
-    var dataDock = DataDock(configuration: dataDockConfiguration)
-
     func testAvoidDuplicateWork() throws {
+        let dataDock = DataDock.default
+
         let count = 3
         var tasks: [URLSessionTask?] = []
         var results: [Result<Data,Error>] = []
 
         let sessionTask = URLSession.shared.dataTask(with: url)
 
-        dataDockDelegate.addTask(sessionTask)
+        // we added a suspended task
+        dataDock.delegate?.addTask(sessionTask)
 
         (0..<count).forEach { n in
             let expectation = self.expectation(description: "e\(n)")
@@ -39,12 +27,39 @@ final class DataDockTests: XCTestCase {
             tasks.append(task)
         }
 
-        dataDockDelegate.urlSession(.shared, task: sessionTask, didCompleteWithError: nil)
+        // tell the delegate we completed the task
+        dataDock.delegate?.urlSession(.shared, task: sessionTask, didCompleteWithError: nil)
         URLSession.shared.invalidateAndCancel()
 
         self.waitForExpectations(timeout: 1)
         XCTAssertEqual(tasks.compactMap({ $0 }).count, 0)
         XCTAssertEqual(results.count, count)
     }
-    
+
+    func testShareDelegateAvoidDuplicateWork() throws {
+        let delegate = DataDockDelegate()
+        let defaultDataDock = DataDock(configuration: .default, delegate: delegate)
+        let backgroundDataDock = DataDock(configuration: .background, delegate: delegate)
+
+        var results: [Result<Data,Error>] = []
+
+        let expectations = (self.expectation(description: "1"), self.expectation(description: "2"))
+        let sessionTask = URLSession.shared.dataTask(with: url)
+
+        delegate.addTask(sessionTask)
+        defaultDataDock.dataTask(request) { result in
+            results.append(result)
+            expectations.0.fulfill()
+        }
+        backgroundDataDock.dataTask(request) { result in
+            results.append(result)
+            expectations.1.fulfill()
+        }
+
+        delegate.urlSession(.shared, task: sessionTask, didCompleteWithError: nil)
+        URLSession.shared.invalidateAndCancel()
+
+        self.waitForExpectations(timeout: 1)
+        XCTAssertEqual(results.count, 2)
+    }
 }

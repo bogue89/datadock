@@ -3,16 +3,18 @@ import FlyweightFactory
 
 public struct DataDock {
 
-    static let domain = "mx.pewpew.DataDock."
+    private static let domain = "mx.pewpew.DataDock."
 
-    private let configuration: DataDockConfiguration
+    public static let `default` = DataDock(configuration: .default, delegate: .init())
+    public static let background = DataDock(configuration: .background, delegate: .init())
 
-    public init(configuration: DataDockConfiguration) {
+    public let configuration: DataDockConfiguration
+    public let delegate: DataDockDelegate?
+
+    public init(configuration: DataDockConfiguration, delegate: DataDockDelegate? = .init()) {
         self.configuration = configuration
+        self.delegate = delegate
     }
-
-    public static let `default` = DataDock(configuration: .default)
-    public static let background = DataDock(configuration: .background)
 
     @discardableResult
     public func dataTask(_ url: URL,
@@ -29,8 +31,7 @@ public struct DataDock {
                          priority: Float? = nil,
                          completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDataTask? {
         return dataTask(request,
-                        session: Self.session(for: configuration),
-                        delegate: configuration.delegate,
+                        session: Self.session(for: configuration, with: delegate),
                         priority: priority ?? configuration.priority,
                         completion: completion)
     }
@@ -38,7 +39,6 @@ public struct DataDock {
     @discardableResult
     public func dataTask(_ request: URLRequest,
                          session: URLSession,
-                         delegate: DataDockDelegate,
                          priority: Float = URLSessionDataTask.defaultPriority,
                          completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDataTask? {
         guard let url = request.url else { return nil }
@@ -62,8 +62,7 @@ public struct DataDock {
                              priority: Float? = nil,
                              completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDownloadTask? {
         return downloadTask(request,
-                            session: Self.session(for: configuration),
-                            delegate: configuration.delegate,
+                            session: Self.session(for: configuration, with: delegate),
                             priority: priority ?? configuration.priority,
                             completion: completion)
     }
@@ -71,7 +70,6 @@ public struct DataDock {
     @discardableResult
     public func downloadTask(_ request: URLRequest,
                              session: URLSession,
-                             delegate: DataDockDelegate,
                              priority: Float = URLSessionDataTask.defaultPriority,
                              completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDownloadTask? {
         guard let url = request.url else { return nil }
@@ -95,8 +93,7 @@ public struct DataDock {
                            priority: Float? = nil,
                            completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionUploadTask? {
         return uploadTask(request,
-                          session: Self.session(for: configuration),
-                          delegate: configuration.delegate,
+                          session: Self.session(for: configuration, with: delegate),
                           priority: priority ?? configuration.priority,
                           completion: completion)
     }
@@ -104,7 +101,6 @@ public struct DataDock {
     @discardableResult
     public func uploadTask(_ request: URLRequest,
                            session: URLSession,
-                           delegate: DataDockDelegate,
                            priority: Float = URLSessionDataTask.defaultPriority,
                            completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionUploadTask? {
         guard let url = request.url else { return nil }
@@ -115,18 +111,18 @@ public struct DataDock {
 
     private func startTask<T: URLSessionTask>(_ url: URL,
                                               priority: Float,
-                                              delegate: DataDockDelegate,
+                                              delegate: DataDockDelegate?,
                                               completion: ((Result<Data, Error>) -> Void)?,
                                               createTask: @escaping(() -> T)) -> T? {
         var task: T?
-        if !delegate.hasTask(for: url, withEqualOrGreaterPriority: priority) {
+        if !(delegate?.hasTask(for: url, withEqualOrGreaterPriority: priority) ?? false) {
             task = createTask()
         }
         if let task = task {
-            delegate.addTask(task)
+            delegate?.addTask(task)
         }
         if let completion = completion {
-            delegate.addTaskCompletion(url, completion: completion)
+            delegate?.addTaskCompletion(url, completion: completion)
         }
         task?.priority = priority
         task?.resume()
@@ -139,8 +135,8 @@ extension DataDock {
         static var instances: [DataDockConfiguration : URLSession] = [:]
     }
 
-    private static func session(for config: DataDockConfiguration) -> URLSession {
-        Factory.instance(for: config, initializer: {
+    private static func session(for config: DataDockConfiguration, with delegate: DataDockDelegate?) -> URLSession {
+        return Factory.instance(for: config, initializer: { [weak delegate] in
             let configuration: URLSessionConfiguration
             if config.isBackground {
                 configuration = URLSessionConfiguration.background(withIdentifier: config.id)
@@ -156,25 +152,28 @@ extension DataDock {
             }
             configuration.allowsCellularAccess = config.allowsCellularAccess
             configuration.isDiscretionary = config.isDiscretionary
-            config.delegate.addCompletionHandler {
-                // invalidate the session, cancel pending tasks, and removing the session form memory
-                terminateSession(with: config.id)
-            }
-            return URLSession(configuration: configuration, delegate: config.delegate, delegateQueue: config.operationQueue)
+            return URLSession(configuration: configuration, delegate: delegate, delegateQueue: delegate?.operationQueue)
         })
     }
 
     @discardableResult
     public static func launchSession(with id: String, completionHandler: @escaping () -> Void) -> URLSession {
         let config = DataDockConfiguration.instance(for: id)
-        config.delegate.addCompletionHandler(completionHandler)
-        return session(for: config)
+        let delegate = DataDockDelegate.instance(for: id)
+        delegate.addCompletionHandler(completionHandler)
+        delegate.addCompletionHandler {
+            // invalidate the session, cancel pending tasks, and removing the session form memory
+            Self.terminateSession(with: config.id)
+        }
+        return Self.session(for: config, with: delegate)
     }
 
     public static func terminateSession(with id: String) {
         let config = DataDockConfiguration.instance(for: id)
         Factory.instance(for: config)?.invalidateAndCancel()
         Factory.destroy(with: config)
+
         DataDockConfiguration.destroy(for: id)
+        DataDockDelegate.destroy(for: id)
     }
 }

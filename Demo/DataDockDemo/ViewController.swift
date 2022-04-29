@@ -10,7 +10,7 @@ import DataDock
 
 class ViewController: UITableViewController {
 
-    var dataDock: DataDock? = DataDock(configuration: .background)
+    var dataDock = DataDock.default
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -21,16 +21,12 @@ class ViewController: UITableViewController {
         tableView.backgroundView = imageView
 
         let imageURL = URL(string: "https://upload.wikimedia.org/wikipedia/commons/9/9a/Gull_portrait_ca_usa.jpg")!
-        dataDock?.downloadTask(imageURL) { result in
+        dataDock.downloadTask(imageURL) { result in
             guard case let .success(data) = result else { return }
             DispatchQueue.main.async {
                 imageView.image = UIImage(data: data)
             }
         }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: { [weak self] in
-            self?.dataDock = nil
-        })
     }
 
 
@@ -61,21 +57,7 @@ class ViewController: UITableViewController {
         let imageURL = URL(string: "https://picsum.photos/id/\(indexPath.item + 10)/200")!
         // only background configuration can continue after termination
         // but with the isDiscretionary setting on true, tasks will fail on auto-redirect
-        dataDock?.downloadTask(imageURL, completion: { result in
-            guard case let .success(data) = result else { return }
-            DispatchQueue.main.async {
-                cell.imageView?.image = UIImage(data: data)
-                cell.setNeedsLayout()
-            }
-        })
-        dataDock?.downloadTask(imageURL, completion: { result in
-            guard case let .success(data) = result else { return }
-            DispatchQueue.main.async {
-                cell.imageView?.image = UIImage(data: data)
-                cell.setNeedsLayout()
-            }
-        })
-        dataDock?.downloadTask(imageURL, completion: { result in
+        dataDock.downloadTask(imageURL, completion: { result in
             guard case let .success(data) = result else { return }
             DispatchQueue.main.async {
                 cell.imageView?.image = UIImage(data: data)
