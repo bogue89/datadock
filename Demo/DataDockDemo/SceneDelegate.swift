@@ -2,7 +2,7 @@
 //  SceneDelegate.swift
 //  DataDockDemo
 //
-//  Created by Jorge Benavides on 23/04/22.
+//  Created by Jorge Benavides
 //
 
 import UIKit

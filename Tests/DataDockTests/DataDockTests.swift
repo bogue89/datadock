@@ -16,7 +16,7 @@ final class DataDockTests: XCTestCase {
         let sessionTask = URLSession.shared.dataTask(with: url)
 
         // we added a suspended task
-        dataDock.delegate?.addTask(sessionTask)
+        dataDock.delegate.addTask(sessionTask)
 
         (0..<count).forEach { n in
             let expectation = self.expectation(description: "e\(n)")
@@ -28,7 +28,7 @@ final class DataDockTests: XCTestCase {
         }
 
         // tell the delegate we completed the task
-        dataDock.delegate?.urlSession(.shared, task: sessionTask, didCompleteWithError: nil)
+        dataDock.delegate.urlSession(.shared, task: sessionTask, didCompleteWithError: nil)
         URLSession.shared.invalidateAndCancel()
 
         self.waitForExpectations(timeout: 1)

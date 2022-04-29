@@ -5,17 +5,21 @@ public struct DataDock {
 
     private static let domain = "mx.pewpew.DataDock."
 
-    public static let `default` = DataDock(configuration: .default, delegate: .init())
-    public static let background = DataDock(configuration: .background, delegate: .init())
+    public static let `default` = DataDock(configuration: .default)
+    public static let background = DataDock(configuration: .background)
 
     public let configuration: DataDockConfiguration
-    public let delegate: DataDockDelegate?
+    public let delegate: DataDockDelegate
 
-    public init(configuration: DataDockConfiguration, delegate: DataDockDelegate? = .init()) {
+    public init(configuration: DataDockConfiguration, delegate: DataDockDelegate = .init()) {
         self.configuration = configuration
         self.delegate = delegate
     }
 
+    private var session: URLSession {
+        Self.session(for: configuration, with: delegate)
+    }
+    
     @discardableResult
     public func dataTask(_ url: URL,
                          priority: Float? = nil,
@@ -31,7 +35,7 @@ public struct DataDock {
                          priority: Float? = nil,
                          completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDataTask? {
         return dataTask(request,
-                        session: Self.session(for: configuration, with: delegate),
+                        session: session,
                         priority: priority ?? configuration.priority,
                         completion: completion)
     }
@@ -62,7 +66,7 @@ public struct DataDock {
                              priority: Float? = nil,
                              completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionDownloadTask? {
         return downloadTask(request,
-                            session: Self.session(for: configuration, with: delegate),
+                            session: session,
                             priority: priority ?? configuration.priority,
                             completion: completion)
     }
@@ -93,7 +97,7 @@ public struct DataDock {
                            priority: Float? = nil,
                            completion: ((Result<Data, Error>) -> Void)? = nil) -> URLSessionUploadTask? {
         return uploadTask(request,
-                          session: Self.session(for: configuration, with: delegate),
+                          session: session,
                           priority: priority ?? configuration.priority,
                           completion: completion)
     }
@@ -135,7 +139,7 @@ extension DataDock {
         static var instances: [DataDockConfiguration : URLSession] = [:]
     }
 
-    private static func session(for config: DataDockConfiguration, with delegate: DataDockDelegate?) -> URLSession {
+    private static func session(for config: DataDockConfiguration, with delegate: DataDockDelegate) -> URLSession {
         return Factory.instance(for: config, initializer: { [weak delegate] in
             let configuration: URLSessionConfiguration
             if config.isBackground {
@@ -152,6 +156,10 @@ extension DataDock {
             }
             configuration.allowsCellularAccess = config.allowsCellularAccess
             configuration.isDiscretionary = config.isDiscretionary
+            delegate?.addCompletionHandler {
+                // invalidate the session, cancel pending tasks, and removing the session form memory
+                Self.terminateSession(with: config.id)
+            }
             return URLSession(configuration: configuration, delegate: delegate, delegateQueue: delegate?.operationQueue)
         })
     }
@@ -161,10 +169,10 @@ extension DataDock {
         let config = DataDockConfiguration.instance(for: id)
         let delegate = DataDockDelegate.instance(for: id)
         delegate.addCompletionHandler(completionHandler)
-        delegate.addCompletionHandler {
-            // invalidate the session, cancel pending tasks, and removing the session form memory
-            Self.terminateSession(with: config.id)
-        }
+//        delegate.addCompletionHandler {
+//            // invalidate the session, cancel pending tasks, and removing the session form memory
+//            Self.terminateSession(with: config.id)
+//        }
         return Self.session(for: config, with: delegate)
     }
 
